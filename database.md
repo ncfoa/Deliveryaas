@@ -28,6 +28,7 @@ create type kyc_status_enum as enum ('not_required','pending','verified','reject
 create type trip_status_enum as enum ('draft','published','in_progress','completed','closed','cancelled');
 create type leg_type_enum as enum ('traveller','local_courier');
 create type leg_status_enum as enum ('planned','requested','booked','in_progress','completed','cancelled','failed');
+create type transport_mode_enum as enum ('flight','car');
 
 -- Shipments & packages
 create type package_category_enum as enum ('document','parcel','electronics','fragile','food','medicine','other');
@@ -37,6 +38,16 @@ create type shipment_status_enum as enum (
   'delivered','cancelled','lost','returned'
 );
 create type package_status_enum as enum ('draft','ready','assigned','in_transit','delivered','cancelled','lost');
+
+-- Identity & documents
+create type identity_document_type_enum as enum ('passport','national_id','driver_license','residence_permit');
+create type document_status_enum as enum ('pending','verified','rejected','expired','revoked');
+create type trip_document_type_enum as enum ('flight_booking','boarding_pass','visa','vehicle_registration','vehicle_insurance','other');
+
+-- Vehicles
+create type vehicle_type_enum as enum ('car','van','motorbike','truck');
+create type vehicle_status_enum as enum ('active','inactive','suspended','verification_pending','verification_failed');
+create type vehicle_document_type_enum as enum ('registration','insurance','inspection','permit');
 
 -- Handoffs & QR
 create type party_type_enum as enum ('sender','traveller','local_courier','recipient','system');
@@ -232,6 +243,27 @@ Purpose: Compliance for payouts (travellers). Store references only; files in `f
 - `verified_at timestamptz null`
 - `rejection_reason text null`
 
+#### 3.8 `identity_documents`
+Purpose: Traveller identity documents for verification and safety.
+- `id uuid pk`
+- `user_id uuid fk users(id)`
+- `type identity_document_type_enum not null`
+- `document_number text null`
+- `issuing_country_id uuid fk countries(id) null`
+- `issued_at timestamptz null`
+- `expires_at timestamptz null`
+- `file_front_id uuid fk files(id) null`
+- `file_back_id uuid fk files(id) null`
+- `selfie_file_id uuid fk files(id) null`
+- `status document_status_enum not null default 'pending'`
+- `provider text null` (verification vendor)
+- `provider_ref text null`
+- `verified_at timestamptz null`
+- `rejection_reason text null`
+- `metadata jsonb not null default '{}'`
+
+Indexes: `(user_id, status)`, `(type)`.
+
 ---
 
 ### 4) Travellers and trips
@@ -252,6 +284,8 @@ Purpose: A published traveller trip from an origin to a destination on specific 
 - `traveller_id uuid fk users(id)`
 - `origin_location_id uuid fk locations(id)`
 - `destination_location_id uuid fk locations(id)`
+- `transport_mode transport_mode_enum not null`
+- `vehicle_id uuid fk user_vehicles(id) null` (for car mode)
 - `earliest_departure timestamptz not null`
 - `latest_arrival timestamptz not null`
 - `status trip_status_enum not null default 'draft'`
@@ -260,20 +294,26 @@ Purpose: A published traveller trip from an origin to a destination on specific 
 - `metadata jsonb not null default '{}'`
 - `created_at`, `updated_at`
 
-Indexes: `(origin_location_id, destination_location_id, earliest_departure)`; btree on `status`.
+Indexes: `(origin_location_id, destination_location_id, earliest_departure)`; btree on `status`, `transport_mode`.
 
 #### 4.3 `trip_legs`
-Purpose: Optional decomposition (e.g., Montreal→Paris as single leg); supports multi-stop trips.
+Purpose: Optional decomposition; supports multi-stop trips; captures mode-specific details.
 - `id uuid pk`
 - `trip_id uuid fk trips(id)`
 - `sequence integer not null`
 - `from_location_id uuid fk locations(id)`
 - `to_location_id uuid fk locations(id)`
+- `transport_mode transport_mode_enum not null`
 - `planned_departure timestamptz not null`
 - `planned_arrival timestamptz not null`
-- `carrier text null` (airline name/code if shared)
+- `carrier text null` (airline)
 - `flight_number text null`
+- `aircraft_model text null`
+- `pnr_locator text null`
+- `vehicle_id uuid fk user_vehicles(id) null` (for car legs)
 - Unique `(trip_id, sequence)`
+
+Indexes: `(trip_id, sequence)`, `(transport_mode)`, `(vehicle_id)`.
 
 #### 4.4 `trip_constraints`
 Purpose: What this traveller accepts for the trip.
@@ -284,6 +324,54 @@ Purpose: What this traveller accepts for the trip.
 - `allowed_categories package_category_enum[] not null default '{}'`
 - `banned_keywords text[] not null default '{}'`
 - `requires_qr_scan boolean not null default true`
+
+#### 4.5 `user_vehicles`
+Purpose: Traveller vehicles for car trips; capacity and verification.
+- `id uuid pk`
+- `user_id uuid fk users(id)`
+- `type vehicle_type_enum not null`
+- `make text null`
+- `model text null`
+- `year integer null`
+- `color text null`
+- `license_plate text null`
+- `country_id uuid fk countries(id) null`
+- `capacity_weight_grams integer null`
+- `capacity_volume_cm3 integer null`
+- `status vehicle_status_enum not null default 'verification_pending'`
+- `is_primary boolean not null default false`
+- `metadata jsonb not null default '{}'`
+
+Indexes: `(user_id, status)`, `(license_plate)` where not null.
+
+#### 4.6 `vehicle_documents`
+Purpose: Vehicle paperwork used for verification and compliance.
+- `id uuid pk`
+- `vehicle_id uuid fk user_vehicles(id)`
+- `type vehicle_document_type_enum not null`
+- `file_id uuid fk files(id)`
+- `issued_at timestamptz null`
+- `expires_at timestamptz null`
+- `status document_status_enum not null default 'pending'`
+- `provider text null`
+- `provider_ref text null`
+- `verified_at timestamptz null`
+- `rejection_reason text null`
+
+Indexes: `(vehicle_id, type)`, `(status)`.
+
+#### 4.7 `trip_documents`
+Purpose: Trip and leg-level documents (flight tickets, boarding passes, permits).
+- `id uuid pk`
+- `trip_id uuid fk trips(id)`
+- `trip_leg_id uuid fk trip_legs(id) null`
+- `type trip_document_type_enum not null`
+- `file_id uuid fk files(id)`
+- `uploaded_by_user_id uuid fk users(id)`
+- `uploaded_at timestamptz not null default now()`
+- `notes text null`
+
+Indexes: `(trip_id, type)`, `(trip_leg_id)`.
 
 ---
 
@@ -896,7 +984,8 @@ Purpose: Compliance with data privacy.
 
 ### 16) Key workflows and how tables link
 
-- **Posting a trip**: `users` (traveller) → `trips` (+ optional `trip_legs`, `trip_constraints`). Trip legs populate `route_graph_edges` for search.
+- **Posting a trip**: `users` (traveller) → `trips` (+ optional `trip_legs`, `trip_constraints`). Set `transport_mode` per trip (and per leg). Car trips link a `user_vehicles` record; flight legs record airline/flight number and upload `trip_documents` such as `flight_booking` or `boarding_pass`.
+- **Uploading documents**: Travellers upload `identity_documents` (passport, ID, license) and vehicle paperwork in `vehicle_documents`. For flights, attach `trip_documents` to the `trip` or specific `trip_leg` (e.g., boarding pass).
 - **Searching routes**: Query saved in `route_search_queries`. Engine builds `route_suggestions` and shows options composed from `trip_legs` and `local_segments` via `route_graph_edges`.
 - **Creating shipment**: Sender creates `shipments`, `packages` (+ photos/items/declaration), selects one suggestion and persists to `itineraries` + `itinerary_legs`.
 - **Booking legs**: For each leg, create `leg_bookings`. Once accepted, create `leg_assignments`. Price consolidated in `price_quotes`.
@@ -913,30 +1002,14 @@ Note: The full schema is captured above; these snippets show canonical patterns.
 -- Helper extension (for UUIDs)
 create extension if not exists pgcrypto;
 
--- users
-create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
-  status user_status_enum not null default 'active',
-  primary_role user_role_enum not null default 'sender',
-  email text unique,
-  email_verified boolean not null default false,
-  phone_e164 text unique,
-  alias text unique not null,
-  language text not null default 'en',
-  country_id uuid references countries(id),
-  kyc_status kyc_status_enum not null default 'not_required',
-  reputation_score numeric(5,2) not null default 0,
-  metadata jsonb not null default '{}',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- trips
+-- trips (with transport_mode and vehicle linkage)
 create table if not exists trips (
   id uuid primary key default gen_random_uuid(),
   traveller_id uuid not null references users(id),
   origin_location_id uuid not null references locations(id),
   destination_location_id uuid not null references locations(id),
+  transport_mode transport_mode_enum not null,
+  vehicle_id uuid references user_vehicles(id),
   earliest_departure timestamptz not null,
   latest_arrival timestamptz not null,
   status trip_status_enum not null default 'draft',
@@ -944,11 +1017,98 @@ create table if not exists trips (
   notes text,
   metadata jsonb not null default '{}',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check ( (transport_mode <> 'car') or (vehicle_id is not null) )
 );
-create index if not exists idx_trips_search on trips (origin_location_id, destination_location_id, earliest_departure);
 
--- shipments
+-- trip_legs (mode-specific details)
+create table if not exists trip_legs (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references trips(id),
+  sequence integer not null,
+  from_location_id uuid not null references locations(id),
+  to_location_id uuid not null references locations(id),
+  transport_mode transport_mode_enum not null,
+  planned_departure timestamptz not null,
+  planned_arrival timestamptz not null,
+  carrier text,
+  flight_number text,
+  aircraft_model text,
+  pnr_locator text,
+  vehicle_id uuid references user_vehicles(id),
+  unique (trip_id, sequence)
+);
+create index if not exists idx_trip_legs_mode on trip_legs (transport_mode);
+
+-- identity documents
+create table if not exists identity_documents (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  type identity_document_type_enum not null,
+  document_number text,
+  issuing_country_id uuid references countries(id),
+  issued_at timestamptz,
+  expires_at timestamptz,
+  file_front_id uuid references files(id),
+  file_back_id uuid references files(id),
+  selfie_file_id uuid references files(id),
+  status document_status_enum not null default 'pending',
+  provider text,
+  provider_ref text,
+  verified_at timestamptz,
+  rejection_reason text,
+  metadata jsonb not null default '{}'
+);
+create index if not exists idx_identity_docs_user_status on identity_documents (user_id, status);
+
+-- user vehicles and documents
+create table if not exists user_vehicles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  type vehicle_type_enum not null,
+  make text,
+  model text,
+  year integer,
+  color text,
+  license_plate text,
+  country_id uuid references countries(id),
+  capacity_weight_grams integer,
+  capacity_volume_cm3 integer,
+  status vehicle_status_enum not null default 'verification_pending',
+  is_primary boolean not null default false,
+  metadata jsonb not null default '{}'
+);
+create index if not exists idx_user_vehicles_user_status on user_vehicles (user_id, status);
+
+create table if not exists vehicle_documents (
+  id uuid primary key default gen_random_uuid(),
+  vehicle_id uuid not null references user_vehicles(id),
+  type vehicle_document_type_enum not null,
+  file_id uuid not null references files(id),
+  issued_at timestamptz,
+  expires_at timestamptz,
+  status document_status_enum not null default 'pending',
+  provider text,
+  provider_ref text,
+  verified_at timestamptz,
+  rejection_reason text
+);
+create index if not exists idx_vehicle_documents_vehicle on vehicle_documents (vehicle_id, type);
+
+-- trip documents (tickets, boarding passes)
+create table if not exists trip_documents (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references trips(id),
+  trip_leg_id uuid references trip_legs(id),
+  type trip_document_type_enum not null,
+  file_id uuid not null references files(id),
+  uploaded_by_user_id uuid not null references users(id),
+  uploaded_at timestamptz not null default now(),
+  notes text
+);
+create index if not exists idx_trip_documents_trip_type on trip_documents (trip_id, type);
+
+-- shipments (unchanged fields trimmed)
 create table if not exists shipments (
   id uuid primary key default gen_random_uuid(),
   sender_id uuid not null references users(id),
@@ -964,81 +1124,22 @@ create table if not exists shipments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
--- itineraries and legs
-create table if not exists itineraries (
-  id uuid primary key default gen_random_uuid(),
-  shipment_id uuid not null unique references shipments(id),
-  search_id uuid references route_search_queries(id),
-  status leg_status_enum not null default 'planned',
-  total_price_cents integer not null default 0,
-  currency_code char(3) not null references currencies(code),
-  notes text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists itinerary_legs (
-  id uuid primary key default gen_random_uuid(),
-  itinerary_id uuid not null references itineraries(id),
-  sequence integer not null,
-  type leg_type_enum not null,
-  from_location_id uuid not null references locations(id),
-  to_location_id uuid not null references locations(id),
-  planned_departure timestamptz not null,
-  planned_arrival timestamptz not null,
-  trip_leg_id uuid references trip_legs(id),
-  local_segment_id uuid references local_segments(id),
-  status leg_status_enum not null default 'planned',
-  price_cents integer not null default 0,
-  currency_code char(3) not null references currencies(code),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (itinerary_id, sequence)
-);
-
--- handoff_steps and scans
-create table if not exists handoff_steps (
-  id uuid primary key default gen_random_uuid(),
-  itinerary_id uuid not null references itineraries(id),
-  sequence integer not null,
-  from_party_type party_type_enum not null,
-  from_user_id uuid references users(id),
-  from_provider_id uuid references local_courier_providers(id),
-  to_party_type party_type_enum not null,
-  to_user_id uuid references users(id),
-  to_provider_id uuid references local_courier_providers(id),
-  handoff_qr_id uuid references qr_codes(id),
-  status handoff_status_enum not null default 'planned',
-  planned_at timestamptz,
-  planned_location_id uuid references locations(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (itinerary_id, sequence)
-);
-
-create table if not exists handoff_scans (
-  id uuid primary key default gen_random_uuid(),
-  handoff_id uuid not null references handoff_steps(id),
-  qr_code_id uuid not null references qr_codes(id),
-  scanned_by_user_id uuid not null references users(id),
-  scan_result text not null,
-  scan_location_id uuid references locations(id),
-  scanned_at timestamptz not null default now(),
-  metadata jsonb not null default '{}'
-);
 ```
 
 ---
 
 ### 18) Indexing guidance (selected)
-- `trips`: composite index on `(origin_location_id, destination_location_id, earliest_departure)` for search; separate index on `status`.
+- `trips`: composite index on `(origin_location_id, destination_location_id, earliest_departure)` for search; separate index on `status`, `transport_mode`.
+- `trip_legs`: `(trip_id, sequence)` unique; index on `transport_mode` and `(vehicle_id)` for car trips.
 - `route_graph_edges`: indexes on `(from_node_id)`, `(to_node_id)`, and `(earliest_departure)` to accelerate path finding within time windows.
 - `itinerary_legs`: `(itinerary_id, sequence)` unique; indexes on `(trip_leg_id)` and `(local_segment_id)` for joins.
 - `shipments`: `(sender_id, created_at desc)`; `status` for dashboards.
 - `handoff_steps`: `(itinerary_id, sequence)` unique; `status` for operational views.
 - `handoff_scans`: `(handoff_id, scanned_at)`; partial index on recent scans.
 - `charges`, `payouts`: by `created_at`/`paid_at` and `status` for finance reports.
+- `identity_documents`: `(user_id, status)` for verification queues.
+- `user_vehicles`: `(user_id, status)` for moderation/ops.
+- `trip_documents`: `(trip_id, type)` for quick retrieval.
 - `invoices`: `(user_id, issued_at desc)`; `status` for AR dashboards.
 
 ---
@@ -1047,6 +1148,8 @@ create table if not exists handoff_scans (
 - Ensure exactly one of `trip_leg_id` or `local_segment_id` is set per `itinerary_legs` via a CHECK:
   - `check ((trip_leg_id is not null) <> (local_segment_id is not null))`
 - In `locations`, enforce only one of `airport_id`, `city_id`, or `address_id` is set.
+- For `trips`, if `transport_mode='car'` then `vehicle_id` must be present.
+- For flight `trip_legs`, prefer `from_location_id` and `to_location_id` referencing airport-type `locations`; enforce via application or triggers.
 - For `shipments` requested windows, validate `requested_pickup_start <= requested_pickup_end` and `requested_delivery_start <= requested_delivery_end` when both present.
 - Use DEFERRABLE FKs where lifecycles are complex (optional).
 - Use database triggers to maintain `updated_at` timestamps.
@@ -1056,8 +1159,11 @@ create table if not exists handoff_scans (
 ### 20) Why each table exists (rationale)
 - `users`, `roles`, `user_roles`, `auth_identities`, `sessions`, `devices`: Account, auth, RBAC, and secure session management.
 - `user_profiles`, `user_stats`, `kyc_verifications`: Public profile without PII exposure, stats for trust, and payout compliance.
+- `identity_documents`: Traveller-provided ID artifacts (passport, ID, license) for safety; distinct from provider-driven `kyc_verifications`.
 - `countries`, `cities`, `airports`, `addresses`, `locations`: Normalized geodata to power routing and display.
-- `traveller_profiles`, `trips`, `trip_legs`, `trip_constraints`: Travellers declare capacity and routes; forms the backbone of route discovery.
+- `traveller_profiles`, `trips`, `trip_legs`, `trip_constraints`: Travellers declare capacity and routes; trips and legs track `transport_mode` with flight and car specifics.
+- `user_vehicles`, `vehicle_documents`: Persist vehicles for car trips and attach verification paperwork.
+- `trip_documents`: Store flight tickets, boarding passes, visas, and vehicle permits at trip/leg level.
 - `local_courier_providers`, `local_service_areas`, `local_segments`, `local_quotes`: First/last‑mile options when direct handoff is not feasible.
 - `recipients`: Minimal endpoint contact for final delivery.
 - `shipments`, `packages`, `package_items`, `package_photos`, `customs_declarations`: Shipment definition, physical packages, documentation, and customs for cross‑border.
@@ -1073,7 +1179,6 @@ create table if not exists handoff_scans (
 - `promotions`, `promotion_redemptions`: Coupons/credits for marketing and customer support adjustments.
 - `cancellation_policies`, `cancellations`: Business rules for refunds and penalties when shipments are canceled.
 - `risk_assessments`, `shipment_holds`, `user_flags`: Trust & safety controls, fraud risk scoring, and operational holds.
-- `support_tickets`, `support_messages`, `moderation_reports`, `moderation_actions`: Customer support workflows and community/moderation tooling.
 - `user_settings`, `mfa_factors`, `mfa_challenges`: User preferences and MFA security.
 - `saved_searches`, `search_alerts`: Persisted discovery with notification alerts when new routes appear.
 - `tags`, `entity_tags`: Flexible labeling for ops and curation across entities.
@@ -1083,6 +1188,7 @@ create table if not exists handoff_scans (
 
 ### 21) Notes on privacy and exposure
 - Travellers’ public profile shows only `alias` and aggregates from `user_stats` (e.g., trips completed, on‑time rate, avg rating). No email/phone exposure.
+- Identity and vehicle documents contain sensitive PII; access is strictly role‑gated, stored via `files` in secure object storage, and should be encrypted at rest with limited retention.
 - Recipient PII limited to delivery context; access controlled and redacted in logs/exports.
 - Chain‑of‑custody QR tokens are opaque and can be short‑lived to limit leakage.
 
@@ -1222,8 +1328,6 @@ Purpose: Records of applied promotions.
 - `amount_cents integer not null`
 - `currency_code char(3) not null`
 - `redeemed_at timestamptz not null default now()`
-
-Uniqueness: Enforce via partial indexes, e.g., unique `(promotion_id, user_id, invoice_id)` where `invoice_id` is not null; unique `(promotion_id, user_id, shipment_id)` where `shipment_id` is not null.
 
 ---
 
