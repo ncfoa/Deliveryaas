@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* CentraNo2 font faces */
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Book"), url("/fonts/centraNo2/CentraNo2-Book.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Medium"), url("/fonts/centraNo2/CentraNo2-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Bold"), url("/fonts/centraNo2/CentraNo2-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Book Italic"), url("/fonts/centraNo2/CentraNo2-BookItalic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Bold Italic"), url("/fonts/centraNo2/CentraNo2-BoldItalic.ttf") format("truetype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Light"), url("/fonts/centraNo2/CentraNo2-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CentraNo2";
+  src: local("CentraNo2 Extrabold"), url("/fonts/centraNo2/CentraNo2-Extrabold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Apply globally */
+html, body {
+  font-family: "CentraNo2", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", "Helvetica Neue", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+/* Keep sidebar from shifting page content: keep gap at icon width */
+[data-slot="sidebar-gap"] {
+  width: var(--sidebar-width-icon) !important;
+}
+
+/* Slide animation for home page images */
+@keyframes slideUpDown {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Loading bar pulse animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
