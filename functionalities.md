@@ -12,7 +12,8 @@ This is a comprehensive Peer-to-Peer (P2P) delivery platform that connects sende
 
 ### 2. **Travelers** (International Carriers)
 - Users who travel internationally and can carry packages
-- Can publish trips and accept delivery requests
+- Publish trips with accepted package categories and capacity
+- System automatically assigns compatible packages to their trips
 - Handle packages during their travel legs
 
 ### 3. **Local Shoppers/Couriers** (Local Delivery Providers)
@@ -120,19 +121,25 @@ This is a comprehensive Peer-to-Peer (P2P) delivery platform that connects sende
      - Departure: January 15, 2024, 17:50
      - Arrival: January 16, 2024, 06:50
      - Transport: Flight (Air Canada)
-     - Capacity: 5kg max, electronics allowed
+     - Capacity: 5kg max
+     - Accepted Categories: Electronics, Documents, Small Items
+     - Special Requirements: Fragile items allowed, insured packages accepted
    - Uploads flight documents (boarding pass, ticket)
-   - Publishes trip as available for package delivery
+   - Publishes trip - system will automatically assign compatible packages
 
-3. **Receiving Delivery Requests**
-   - Ahmed receives notification about Sarah's package request
-   - Reviews package details:
+3. **Automatic Package Matching**
+   - System automatically matches Sarah's package to Ahmed's trip
+   - Matching criteria:
+     - Route compatibility (Montreal to Paris)
+     - Date alignment (January 15, 2024)
+     - Package category (Electronics - matches Ahmed's accepted categories)
+     - Weight capacity (1kg within Ahmed's 5kg limit)
+   - Ahmed receives notification about automatically assigned package
+   - Package details:
      - Type: Small Box, 1kg
      - Value: $500
      - Contents: Electronics - laptop accessories
      - Special handling: Fragile, insured
-   - Reviews sender and recipient information
-   - Accepts the delivery request
 
 4. **Package Pickup**
    - Ahmed receives pickup instructions
@@ -375,7 +382,7 @@ This is a comprehensive Peer-to-Peer (P2P) delivery platform that connects sende
 ## Key Workflows Summary
 
 1. **Sender Workflow**: Search → Select → Book → Pay → Track → Confirm
-2. **Traveler Workflow**: Register → Publish Trip → Accept Request → Pickup → Travel → Handoff → Get Paid
+2. **Traveler Workflow**: Register → Publish Trip (with categories) → Auto-Assignment → Pickup → Travel → Handoff → Get Paid
 3. **Local Courier Workflow**: Register → Receive Assignment → Pickup → Deliver → Get Paid
 4. **Recipient Workflow**: Get Notified → Prepare → Receive → Confirm → Rate
 5. **Admin Workflow**: Monitor → Verify → Support → Resolve → Report
